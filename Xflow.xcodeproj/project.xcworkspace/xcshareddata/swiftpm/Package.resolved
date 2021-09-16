@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "Regex",
+        "repositoryURL": "https://github.com/ericliuhusky/Regex.git",
+        "state": {
+          "branch": null,
+          "revision": "b662609a42ede6fe186f532dca7c282cdf2d3ad7",
+          "version": "1.0.0"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
