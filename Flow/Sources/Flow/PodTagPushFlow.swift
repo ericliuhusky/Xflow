@@ -30,16 +30,44 @@ struct PodTagPushFlow {
             let path = podRepo.path,
             let specName = podRepo.specName
         else { return }
-        FileManager.default.changeCurrentDirectoryPath(path)
         
-        try Shell.run("git add \(specName)")
-        try Shell.run("git commit -m '[Update]\(tag)'")
-        try Shell.run("git push")
-        try Shell.run("git tag \(tag)")
-        try Shell.run("git push origin \(tag)")
+        if FileManager.default.changeCurrentDirectoryPath(path) {
+            try ShellCommand.gitPush(filePath: specName, message: "[Update]\(tag)")
+            try ShellCommand.git(tag: tag)
+        }
     }
     
-    func podRepoPush() {
+    func podRepoPush(version: String) throws {
+        guard
+            let specsRepo = SpecsRepo.repo,
+            let specsRepoPath = specsRepo.path,
+            let specsRepoSpecsPath = specsRepo.specsPath,
+            let workspacePath = Config.workspacePath,
+            let podRepoSpecPath = podRepo.specPath,
+            let podRepoName = podRepo.name,
+            let podRepoSpecName = podRepo.specName
+        else { return }
         
+        let specsRepoPodVersionPath = specsRepoSpecsPath + "/\(podRepoName)/\(version)"
+        let specsRepoPodSpecPath = specsRepoPodVersionPath + "/\(podRepoSpecName)"
+        
+        if !FileManager.default.fileExists(atPath: specsRepoPath) {
+            if FileManager.default.changeCurrentDirectoryPath(workspacePath) {
+                try Shell.run("git clone \(specsRepo.url)")
+            }
+        }
+
+        try FileManager.default.createDirectory(atPath: specsRepoPodVersionPath, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(atPath: podRepoSpecPath, toPath: specsRepoPodSpecPath)
+
+        if FileManager.default.changeCurrentDirectoryPath(specsRepoPath) {
+            try ShellCommand.gitPush(filePath: specsRepoPodSpecPath, message: "[Update] \(podRepoName) (\(version))")
+        }
+    }
+    
+    func run(tag: String) throws {
+        try modifySpec(version: tag)
+        try gitPush(tag: tag)
+        try podRepoPush(version: tag)
     }
 }

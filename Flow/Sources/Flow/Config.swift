@@ -7,4 +7,5 @@
 
 struct Config {
     static var workspacePath: String?
+    static var specsRepoUrl: String?
 }

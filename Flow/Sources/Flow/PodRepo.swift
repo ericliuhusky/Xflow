@@ -13,7 +13,10 @@ struct PodRepo {
     }
 
     private var components: [String] {
-        url.split(separator: "/").map { String($0) }
+        if url.hasSuffix(".git") {
+            return url.dropLast(4).split(separator: "/").map { String($0) }
+        }
+        return url.split(separator: "/").map { String($0) }
     }
 
     var name: String? {

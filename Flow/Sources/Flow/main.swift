@@ -3,19 +3,12 @@ import AppKit
 
 
 Config.workspacePath = "/Users/lzh/Workspace"
+Config.specsRepoUrl = "http://localhost:3000/gitea/babybus-specs"
 
-let repo = SpecsRepo("http://git.babybus.co/Babybus-iOS/Specs/babybus-specs")
 let podRepo = PodRepo("http://localhost:3000/gitea/NRDigitalVerifyView_Swift")
 
-let newVersion = "21.9.18"
+let newVersion = "23.23.23"
 
 let flow = PodTagPushFlow(podRepo: podRepo)
-try flow.modifySpec(version: newVersion)
-try flow.gitPush(tag: newVersion)
+try flow.run(tag: newVersion)
 
-//if !FileManager.default.fileExists(atPath: repo.path!) {
-//    run("git clone \(repo.url)")
-//}
-
-//FileManager.default.changeCurrentDirectoryPath("/Users/lzh/workspace")
-//try FileManager.default.createDirectory(at: URL(fileURLWithPath: "temp"), withIntermediateDirectories: false)
