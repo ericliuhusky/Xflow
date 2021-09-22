@@ -8,4 +8,6 @@
 struct Config {
     static var workspacePath: String?
     static var specsRepoUrl: String?
+    
+    static var podRepoUrls: [String] = []
 }
