@@ -77,7 +77,7 @@ struct Project {
                     
                     return Pod(repo: podRepo, source: .version(version))
                 } else {
-                    return Pod(repo: podRepo, source: .version("up to date"))
+                    return Pod(repo: podRepo, source: .version(nil))
                 }
             } else if let branchField = podLine.regex.firstMatch(pattern: #":branch\s*=>\s*'[a-zA-Z0-9_/]+'"#) {
                 guard let branch = branchField.regex.firstMatch(pattern: #"'[a-zA-Z0-9_/]+'"#)?.replacingOccurrences(of: ".", with: "") else { return nil }
@@ -89,9 +89,9 @@ struct Project {
             return Pod(repo: podRepo, source: nil)
         }
         
-        pods = pods.filter { pod in
-            pods.filter { $0.repo.name == pod.repo.name }.count <= 1 || pod.source == .local
-        }
+//        pods = pods.filter { pod in
+//            pods.filter { $0.repo.name == pod.repo.name }.count <= 1 || pod.source == .local
+//        }
         
         return pods
     }
@@ -133,6 +133,12 @@ struct Pod {
             let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
             try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
         case .local:
+            if !FileManager.default.fileExists(atPath: Flow.repo.path! + "/xflow.rb") {
+                FileManager.default.createFile(atPath: Flow.repo.path! + "/xflow.rb", contents: nil)
+            }
+            
+            
+            
             let newPodLine = "{ :names => ['\(repo.name!)'], :method => 'LOCAL' }"
             
             let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
@@ -143,3 +149,26 @@ struct Pod {
 
 let project = Project(repo: repo)
 print(project.pods)
+try project.pods[0].setSource(.branch("develop"))
+
+func xflowModules() -> String {
+    """
+    #!/usr/bin/ruby
+    require File.join(File.dirname(__FILE__), '../PodBox.rb')
+
+
+    def xflow_config
+        { :name => :xflow,
+          :pathes => ['/Users/lzh/Workspace/Pods/Recommend',
+                      '/Users/lzh/Workspace/Pods/Business',
+                      '/Users/lzh/Desktop'],
+          :force_local => false }
+    end
+
+    def xflow_modules
+    [
+        { :names => ['BBDigitalVerifyView'], :method => LOCAL },
+    ]
+    end
+    """
+}
