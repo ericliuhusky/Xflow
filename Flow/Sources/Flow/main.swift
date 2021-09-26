@@ -89,11 +89,66 @@ struct Project {
             return Pod(repo: podRepo, source: nil)
         }
         
-//        pods = pods.filter { pod in
-//            pods.filter { $0.repo.name == pod.repo.name }.count <= 1 || pod.source == .local
-//        }
+        pods = pods.map { pod in
+            if localPods.contains(where: { localPod in
+                localPod.repo.name == pod.repo.name
+            }) {
+                return Pod(repo: pod.repo, source: .local)
+            }
+            return pod
+        }
         
         return pods
+    }
+    
+    var localPods: [Pod] {
+        guard let xflowContent = try? String(contentsOfFile: repo.path! + "/xflow.rb") else { return [] }
+        let podLines = xflowContent.regex.matches(pattern: #"\{\s*:names\s*=>\s*\['[a-zA-Z0-9_/]+'\],.*\}"#)
+        return podLines.compactMap { podLine in
+            guard let nameField = podLine.regex.firstMatch(pattern: #"\['[a-zA-Z0-9_/]+'\]"#) else { return nil }
+            let name = nameField.regex.replacingMatches(pattern: #"[\[\]']*"#, with: "")
+            guard let podRepo = Config.podRepoUrls.map({ url in
+                PodRepo(url)
+            }).first(where: { repo in
+                repo.name == name
+            }) else { return nil }
+            return Pod(repo: podRepo, source: .local)
+        }
+    }
+    
+    func setPod(_ pod: Pod) throws {
+        guard let podfilePath = repo.podfilePath else { return }
+        guard let podfileContent = try? String(contentsOfFile: podfilePath) else { return }
+        guard let podLine = podfileContent.regex.firstMatch(pattern: "\\{\\s*:names\\s*=>\\s*\\['\(pod.repo.name!)'\\],.*\\}") else { return }
+        guard let podLineRange = podfileContent.range(of: podLine) else { return }
+        switch pod.source {
+        case .version(let string):
+            if let string = string {
+                let newPodLine = "{ :names => ['\(pod.repo.name!)'], :version => '\(string)', :method => 'REMOTE_VERSION' }"
+                
+                let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
+                try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
+            } else {
+                let newPodLine = "{ :names => ['\(pod.repo.name!)'], :method => 'REMOTE_VERSION' }"
+                
+                let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
+                try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
+            }
+            
+        case .branch(let string):
+            let newPodLine = "{ :names => ['\(pod.repo.name!)'], :git => '\(pod.repo.url)', :branch => '\(string)' }"
+            
+            let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
+            try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
+        case .local:
+            if !FileManager.default.fileExists(atPath: repo.path! + "/xflow.rb") {
+                FileManager.default.createFile(atPath: repo.path! + "/xflow.rb", contents: nil)
+            }
+
+            try xflowModules(localPods: localPods + [pod]).write(toFile: repo.path! + "/xflow.rb", atomically: true, encoding: .utf8)
+        case .none:
+            break
+        }
     }
 }
 
@@ -107,52 +162,18 @@ struct Pod {
     let repo: PodRepo
     
     let source: Source?
-    
-    func setSource(_ source: Source) throws {
-        guard let podfilePath = Flow.repo.podfilePath else { return }
-        guard let podfileContent = try? String(contentsOfFile: podfilePath) else { return }
-        guard let podLine = podfileContent.regex.firstMatch(pattern: "\\{\\s*:names\\s*=>\\s*\\['\(repo.name!)'\\],.*\\}") else { return }
-        guard let podLineRange = podfileContent.range(of: podLine) else { return }
-        switch source {
-        case .version(let string):
-            if let string = string {
-                let newPodLine = "{ :names => ['\(repo.name!)'], :version => '\(string)', :method => 'REMOTE_VERSION' }"
-                
-                let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
-                try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
-            } else {
-                let newPodLine = "{ :names => ['\(repo.name!)'], :method => 'REMOTE_VERSION' }"
-                
-                let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
-                try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
-            }
-            
-        case .branch(let string):
-            let newPodLine = "{ :names => ['\(repo.name!)'], :git => '\(repo.url)', :branch => '\(string)' }"
-            
-            let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
-            try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
-        case .local:
-            if !FileManager.default.fileExists(atPath: Flow.repo.path! + "/xflow.rb") {
-                FileManager.default.createFile(atPath: Flow.repo.path! + "/xflow.rb", contents: nil)
-            }
-            
-            
-            
-            let newPodLine = "{ :names => ['\(repo.name!)'], :method => 'LOCAL' }"
-            
-            let newPodfileContent = podfileContent.replacingCharacters(in: podLineRange, with: newPodLine)
-            try newPodfileContent.write(toFile: podfilePath, atomically: true, encoding: .utf8)
-        }
-    }
 }
 
 let project = Project(repo: repo)
 print(project.pods)
-try project.pods[0].setSource(.branch("develop"))
+try project.setPod(Pod(repo: PodRepo("http://git.babybus.co/Platform-iOS/Business/BBDigitalVerifyView"), source: .version(nil)))
 
-func xflowModules() -> String {
-    """
+func xflowModules(localPods: [Pod]) -> String {
+    let localPodsString = localPods.reduce("") { result, pod in
+        result + "  { :names => ['\(pod.repo.name!)'], :method => LOCAL },\n"
+    }
+    
+    return """
     #!/usr/bin/ruby
     require File.join(File.dirname(__FILE__), '../PodBox.rb')
 
@@ -167,7 +188,7 @@ func xflowModules() -> String {
 
     def xflow_modules
     [
-        { :names => ['BBDigitalVerifyView'], :method => LOCAL },
+    \(localPodsString)
     ]
     end
     """
